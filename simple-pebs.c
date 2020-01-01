@@ -61,6 +61,10 @@
 #include <asm/desc.h>
 #include <cpuid.h>
 #include "simple-pebs.h"
+#include <linux/fs.h>
+#include <asm/segment.h>
+#include <asm/uaccess.h>
+#include <linux/buffer_head.h>
 
 #define get_current() (current_thread_info()->task)
 #define current get_current()
@@ -120,14 +124,12 @@ unsigned long long llc_reference,llc_miss,instr,cycle;
 /*programable counter2 for LLC-reference*/
 static void get_current_reference(void* arg){
 	rdmsrl(MSR_IA32_PMC2,llc_reference);
-	printk("get reference: rdmsr %llx %llx\n",MSR_IA32_PMC2,llc_reference);
 	__this_cpu_write(cur_reference,llc_reference);
 }
 
 /*programable counter3 for LLC-miss*/
 static void get_current_miss(void* arg){
 	rdmsrl(MSR_IA32_PMC3,llc_miss);
-	printk("get miss: rdmsr %llx %llx\n",MSR_IA32_PMC3,llc_miss);
 	__this_cpu_write(cur_miss,llc_miss);
 }
 
@@ -139,6 +141,65 @@ static void get_current_instr(void* arg){
 static void get_current_cycle(void* arg){
 	rdmsrl(MSR_FIXED_CTR1,cycle);
 	__this_cpu_write(cur_cycle,cycle);
+}
+
+/*file open and read*/
+struct file *file_open(const char *path, int flags, int rights){
+	struct file *filp = NULL;
+	mm_segment_t oldfs;
+	int err = 0;
+
+	oldfs = get_fs();
+	set_fs(get_ds());
+	filp = filp_open(path, flags, rights);
+	set_fs(oldfs);
+	if (IS_ERR(filp)) {
+		err = PTR_ERR(filp);
+		return NULL;
+	}
+	return filp;
+}
+
+void file_close(struct file *file){
+	filp_close(file, NULL);
+}
+
+int file_read(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size){
+	mm_segment_t oldfs;
+	int ret;
+
+	oldfs = get_fs();
+	set_fs(get_ds());
+
+	ret = vfs_read(file, data, size, &offset);
+
+	set_fs(oldfs);
+	return ret;
+}   
+
+/*virtual address to physical address*/
+
+struct file* pid_to_open_proc(pid_t pid){
+	char pagemap_file[8192];
+	struct file * pagemap_fd;
+	snprintf(pagemap_file, sizeof(pagemap_file), "/proc/%d/pagemap", (int)pid);
+	pagemap_fd = file_open(pagemap_file, O_RDONLY,0644);
+	if (pagemap_fd < 0) {
+		return -1;
+	}
+	return pagemap_fd;
+}
+
+
+int virt_to_phys_user(uintptr_t *paddr, struct file* fd, uintptr_t vaddr){
+	uint64_t data;
+	uint64_t vpn;
+
+	vpn = vaddr / 4096;
+	file_read(fd, &data, sizeof(data), vpn * sizeof(data));
+
+	*paddr = ((data & (((uint64_t)1 << 54) - 1)) * 4096) + (vaddr % 4096);
+	return 0;
 }
 
 static unsigned pebs_event;
@@ -542,7 +603,16 @@ void simple_pebs_pmi(void)
 	wrmsrl(MSR_IA32_PERFCTR0, -PERIOD); /* ? sign extension on width ? */
 
 	status_dump("pmi2");
+	
+	/*
+	Extended by yaocheng. Get target process's PID and then check its pagemap from /proc/$PID/pagemap.
+	*/	
+	pid_t cur_pid = task_pid_nr(current);
 
+	struct file * pagemap_fd;
+	
+	pagemap_fd = pid_to_open_proc(cur_pid);
+	uint64_t dla,dpa;	
 	/* write data to buffer */
 	ds = __this_cpu_read(cpu_ds);
 	outbu_start = __this_cpu_read(out_buffer_base);
@@ -552,15 +622,18 @@ void simple_pebs_pmi(void)
 	for (pebs = (struct pebs_v1 *)ds->pebs_base;
 	     pebs < end && outbu < outbu_end;
 	     pebs = (struct pebs_v1 *)((char *)pebs + pebs_record_size)) {
-		uint64_t dla = pebs->dla;
+		dla = pebs->dla;
+		virt_to_phys_user(&dpa, pagemap_fd, dla);
+
     /*    printk(KERN_DEBUG"dla %u,dse %u,lat %u,ip %u\n",dla,pebs->dse,pebs->lat,pebs->ip);
 		if (pebs_record_size >= sizeof(struct pebs_v2))
 			ip = ((struct pebs_v2 *)pebs)->eventing_ip;
 
     */
-    *outbu++ = dla;
-
+		*outbu++ = dla;
 	}
+	
+	file_close(pagemap_fd);
    /* 
     printk(KERN_DEBUG"cpuid %u, num of address in outbu:%u, occupy:%u/%u",smp_processor_id(),(outbu-outbu_start),(void*)outbu-(void*)outbu_start,OUT_BUFFER_SIZE);
 */	
