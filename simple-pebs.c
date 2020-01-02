@@ -143,65 +143,6 @@ static void get_current_cycle(void* arg){
 	__this_cpu_write(cur_cycle,cycle);
 }
 
-/*file open and read*/
-struct file *file_open(const char *path, int flags, int rights){
-	struct file *filp = NULL;
-	mm_segment_t oldfs;
-	int err = 0;
-
-	oldfs = get_fs();
-	set_fs(get_ds());
-	filp = filp_open(path, flags, rights);
-	set_fs(oldfs);
-	if (IS_ERR(filp)) {
-		err = PTR_ERR(filp);
-		return NULL;
-	}
-	return filp;
-}
-
-void file_close(struct file *file){
-	filp_close(file, NULL);
-}
-
-int file_read(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size){
-	mm_segment_t oldfs;
-	int ret;
-
-	oldfs = get_fs();
-	set_fs(get_ds());
-
-	ret = vfs_read(file, data, size, &offset);
-
-	set_fs(oldfs);
-	return ret;
-}   
-
-/*virtual address to physical address*/
-
-struct file* pid_to_open_proc(pid_t pid){
-	char pagemap_file[8192];
-	struct file * pagemap_fd;
-	snprintf(pagemap_file, sizeof(pagemap_file), "/proc/%d/pagemap", (int)pid);
-	pagemap_fd = file_open(pagemap_file, O_RDONLY,0644);
-	if (pagemap_fd < 0) {
-		return -1;
-	}
-	return pagemap_fd;
-}
-
-
-int virt_to_phys_user(uintptr_t *paddr, struct file* fd, uintptr_t vaddr){
-	uint64_t data;
-	uint64_t vpn;
-
-	vpn = vaddr / 4096;
-	file_read(fd, &data, sizeof(data), vpn * sizeof(data));
-
-	*paddr = ((data & (((uint64_t)1 << 54) - 1)) * 4096) + (vaddr % 4096);
-	return 0;
-}
-
 static unsigned pebs_event;
 
 static volatile int pebs_error;
@@ -607,12 +548,7 @@ void simple_pebs_pmi(void)
 	/*
 	Extended by yaocheng. Get target process's PID and then check its pagemap from /proc/$PID/pagemap.
 	*/	
-	pid_t cur_pid = task_pid_nr(current);
-
-	struct file * pagemap_fd;
-	
-	pagemap_fd = pid_to_open_proc(cur_pid);
-	uint64_t dla,dpa;	
+	uint64_t dla;	
 	/* write data to buffer */
 	ds = __this_cpu_read(cpu_ds);
 	outbu_start = __this_cpu_read(out_buffer_base);
@@ -623,8 +559,6 @@ void simple_pebs_pmi(void)
 	     pebs < end && outbu < outbu_end;
 	     pebs = (struct pebs_v1 *)((char *)pebs + pebs_record_size)) {
 		dla = pebs->dla;
-		virt_to_phys_user(&dpa, pagemap_fd, dla);
-
     /*    printk(KERN_DEBUG"dla %u,dse %u,lat %u,ip %u\n",dla,pebs->dse,pebs->lat,pebs->ip);
 		if (pebs_record_size >= sizeof(struct pebs_v2))
 			ip = ((struct pebs_v2 *)pebs)->eventing_ip;
