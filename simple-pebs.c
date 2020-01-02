@@ -566,12 +566,8 @@ void simple_pebs_pmi(void)
     */
 		*outbu++ = dla;
 	}
-	
-	file_close(pagemap_fd);
-   /* 
-    printk(KERN_DEBUG"cpuid %u, num of address in outbu:%u, occupy:%u/%u",smp_processor_id(),(outbu-outbu_start),(void*)outbu-(void*)outbu_start,OUT_BUFFER_SIZE);
-*/	
-    this_cpu_write(out_buffer, outbu);
+
+	this_cpu_write(out_buffer, outbu);
 
 #if 0
 	pr_debug("%d: pmi %llx out %lx max %llx counter %llx num %llu\n",
