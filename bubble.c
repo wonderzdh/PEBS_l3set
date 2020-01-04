@@ -84,36 +84,43 @@ int main(int ac, char **av)
 	struct pollfd pfd[ncpus];
 	int opt;
 	int i;
-
 	for (i = 0; i < ncpus; i++)
 		open_cpu(&map[i], i, &pfd[i], size);
-	
 	int target = 7;
+	pid_t pid;
+	int pagemap_fd;
 
-	int _count = 0;
 	for(;;){
-		usleep(200000);
+		usleep(2000000);
 		if(poll(pfd, ncpus, -1)<0)
 			perror("poll");
 		if(pfd[target].revents & POLLIN){
+	
+			if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
+				perror("GET_PID");
+				continue;
+			}
+			printf("pid:%d\n",pid);
+			pagemap_fd = open_pagemap(pid);
+			
 			int len=0;
-
 			if(ioctl(pfd[target].fd, SIMPLE_PEBS_GET_OFFSET, &len) < 0){
 				perror("SIMPLE_PEBS_GET_OFFSET");
 				continue;
 			}
-
-			
-  			printf("%d\n",len/8);			
-			dump_data(target, map[target], len / sizeof(u64));
-			
+			/*get physical address and count*/
+			unsigned long long paddr;
+			unsigned long long *vaddrset=(u64*) map[target];
+			int j;
+			for( j=0; j<len/8; j++){
+				virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
+				printf("%lx\n",paddr);
+			}
 
 			if (ioctl(pfd[target].fd, SIMPLE_PEBS_RESET, 0) < 0) {
 				perror("SIMPLE_PEBS_RESET");
 				continue;
 			}
-			_count+=(len/8);
-			printf("size:%d total:%d\n",len/8,_count);
 		}
 	}
 	return 0;
