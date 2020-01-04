@@ -119,6 +119,8 @@ static DEFINE_PER_CPU(unsigned long long,cur_instr);
 static DEFINE_PER_CPU(unsigned long long,cur_cycle);
 static DEFINE_PER_CPU(unsigned long long,cur_miss);
 
+static DEFINE_PER_CPU(pid_t,cur_pid);/*current core PID*/
+
 unsigned long long llc_reference,llc_miss,instr,cycle;
 
 /*programable counter2 for LLC-reference*/
@@ -391,6 +393,8 @@ static long simple_pebs_ioctl(struct file *file, unsigned int cmd,
 	case GET_CURRENT_CYCLE:
 		smp_call_function_single(cpu, get_current_cycle, NULL, 1);
 		return put_user(per_cpu(cur_cycle, cpu),(unsigned long long*)arg);
+	case GET_PID:
+		return put_user(per_cpu(cur_pid, cpu),(pid_t*)arg);
 	default:
 		return -ENOTTY;
 	}
@@ -534,6 +538,9 @@ void simple_pebs_pmi(void)
 	u64 *outbu, *outbu_end, *outbu_start;
 
 	status_dump("pmi1");
+	
+	pid_t current_pid = task_pid_nr(current);
+	this_cpu_write(cur_pid,current_pid);
 
 	/* disable PMU */
 	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, 0x30000000c);
