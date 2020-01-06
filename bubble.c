@@ -24,6 +24,11 @@
 #define hash_1 0x2EB5FAA880
 #define hash_2 0x3CCCC93100
 
+unsigned long long TARGETSET=705;
+
+int slice_set_count[2048][8]={0};
+int single_set_count[8]={0};
+
 uint64_t rte_xorall64(uint64_t ma) {
         return __builtin_parityll(ma);
 }
@@ -34,15 +39,6 @@ uint8_t calculateSlice(uint64_t pa) {
         sliceNum= (sliceNum << 1) | (rte_xorall64(pa&hash_1));
         sliceNum= (sliceNum << 1) | (rte_xorall64(pa&hash_0));
         return sliceNum;
-}
-
-void dump_data(int cpunum, u64 *map, int num)
-{
-	int i;
-	
-	printf("dump %d\n", num);
-	for (i = 0; i < num; i++)
-		printf("%d: %lx\n", cpunum, map[i]);
 }
 
 int open_pagemap(pid_t pid)
@@ -89,39 +85,79 @@ int main(int ac, char **av)
 	int target = 7;
 	pid_t pid;
 	int pagemap_fd;
+	int x=0;
+	int _count=0;
+	unsigned long long vaddr_filter = (TARGETSET & 0x3f)<<6;
 
-	for(;;){
-		usleep(2000000);
+	for(; x<1000; x++){
+		usleep(200000);
 		if(poll(pfd, ncpus, -1)<0)
 			perror("poll");
 		if(pfd[target].revents & POLLIN){
-	
-			if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
-				perror("GET_PID");
-				continue;
+			printf("ok\n");		
+			if(x==0){	
+				if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
+					perror("GET_PID");
+					continue;
+				}
+				pagemap_fd = open_pagemap(pid);
 			}
-			printf("pid:%d\n",pid);
-			pagemap_fd = open_pagemap(pid);
-			
 			int len=0;
 			if(ioctl(pfd[target].fd, SIMPLE_PEBS_GET_OFFSET, &len) < 0){
 				perror("SIMPLE_PEBS_GET_OFFSET");
 				continue;
 			}
+			printf("len:%d\n",len/8);
 			/*get physical address and count*/
 			unsigned long long paddr;
 			unsigned long long *vaddrset=(u64*) map[target];
 			int j;
-			for( j=0; j<len/8; j++){
+			for(j=0; j<len/8; j++){
+	/*			if((vaddrset[j] & 0xfc0)- vaddr_filter == 0){
 				virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
-				printf("%lx\n",paddr);
-			}
-
+					if(((paddr >> 6) & 0x7ff) - TARGETSET == 0){
+						single_set_count[calculateSlice(paddr)]++;
+					}
+	*/
+				virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
+				slice_set_count[(paddr >> 6) & 0x7ff][calculateSlice(paddr)]++;
+	
+				}
+			}	
 			if (ioctl(pfd[target].fd, SIMPLE_PEBS_RESET, 0) < 0) {
 				perror("SIMPLE_PEBS_RESET");
 				continue;
 			}
 		}
+/*		if(x%100==0){
+			printf("dump time:%d\n",x);
+			int y=0;
+			for(y=0;y<2048;y++){
+				printf("set%d ",y);
+				for(i=0;i<8;i++){
+					if(i!=7)printf("%d ",slice_set_count[y][i]);
+					else	printf("%d\n",slice_set_count[y][i]);
+				}
+			}
+			memset(slice_set_count,0,sizeof(int)*2048*8);
+		}
+*/
+	
+	close(pagemap_fd);
+/*
+	for(x=0;x<8;x++) printf("%d\n",single_set_count[x]);
+*/
+
+	FILE *result;
+	result = fopen("result.txt","w");
+	for(x=0;x<2048;x++){
+		fprintf(result,"set%d ",x);
+		for(i=0;i<8;i++){
+			if(i!=7)fprintf(result,"%d ",slice_set_count[x][i]);
+			else	fprintf(result,"%d\n",slice_set_count[x][i]);
+		}
 	}
+	fclose(result);
+
 	return 0;
 }
