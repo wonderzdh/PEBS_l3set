@@ -104,15 +104,15 @@ int main(int ac, char **av)
 		switch(opt){
 			case 'a':
 				mode=0;
-				snprintf(path,50,"%s",optarg);
+				snprintf(path,300,"%s",optarg);
 				break;
 			case 'b':
 				mode=1;
-				snprintf(path,50,"%s",optarg);
+				snprintf(path,300,"%s",optarg);
 				break;
 			case 'c':
 				mode=2;
-				snprintf(path,50,"%s",optarg);
+				snprintf(path,300,"%s",optarg);
 				break;
 
 			default:
