@@ -12,7 +12,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-
+#include <sys/wait.h>
 
 #include "simple-pebs.h"
 #include "dump-util.h"
@@ -26,19 +26,21 @@
 
 unsigned long long TARGETSET=705;
 
+int quit_flag=0;
+
 int slice_set_count[2048][8]={0};
 int single_set_count[8]={0};
 
 uint64_t rte_xorall64(uint64_t ma) {
-        return __builtin_parityll(ma);
+	return __builtin_parityll(ma);
 }
 
 uint8_t calculateSlice(uint64_t pa) {
-        uint8_t sliceNum=0;
-        sliceNum= (sliceNum << 1) | (rte_xorall64(pa&hash_2));
-        sliceNum= (sliceNum << 1) | (rte_xorall64(pa&hash_1));
-        sliceNum= (sliceNum << 1) | (rte_xorall64(pa&hash_0));
-        return sliceNum;
+	uint8_t sliceNum=0;
+	sliceNum= (sliceNum << 1) | (rte_xorall64(pa&hash_2));
+	sliceNum= (sliceNum << 1) | (rte_xorall64(pa&hash_1));
+	sliceNum= (sliceNum << 1) | (rte_xorall64(pa&hash_0));
+	return sliceNum;
 }
 
 int open_pagemap(pid_t pid)
@@ -67,9 +69,12 @@ int virt_to_phys_user(uintptr_t *paddr, int fd, uintptr_t vaddr){
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: dumper [-b]\n"
-		"-b binary dump\n");
+	fprintf(stderr, "Usage: bubble filename\n");
 	exit(1);
+}
+
+void handler(int sig){
+	quit_flag = 1;
 }
 
 int main(int ac, char **av)
@@ -88,9 +93,14 @@ int main(int ac, char **av)
 	int x=0;
 	int _count=0;
 	unsigned long long vaddr_filter = (TARGETSET & 0x3f)<<6;
+	
+	
+	char path[500];
 
-	for(; x<1000; x++){
-		usleep(200000);
+	signal(SIGINT, handler);
+	while(!quit_flag){
+		
+		usleep(500000);
 		if(poll(pfd, ncpus, -1)<0)
 			perror("poll");
 		if(pfd[target].revents & POLLIN){
@@ -107,7 +117,7 @@ int main(int ac, char **av)
 				perror("SIMPLE_PEBS_GET_OFFSET");
 				continue;
 			}
-			printf("len:%d\n",len/8);
+			/*printf("len:%d\n",len/8);*/
 			/*get physical address and count*/
 			unsigned long long paddr;
 			unsigned long long *vaddrset=(u64*) map[target];
@@ -123,31 +133,34 @@ int main(int ac, char **av)
 				slice_set_count[(paddr >> 6) & 0x7ff][calculateSlice(paddr)]++;
 	
 				}
-			}	
-			if (ioctl(pfd[target].fd, SIMPLE_PEBS_RESET, 0) < 0) {
+		}	
+		if (ioctl(pfd[target].fd, SIMPLE_PEBS_RESET, 0) < 0) {
 				perror("SIMPLE_PEBS_RESET");
 				continue;
-			}
 		}
-/*		if(x%100==0){
-			printf("dump time:%d\n",x);
-			int y=0;
-			for(y=0;y<2048;y++){
-				printf("set%d ",y);
+		if(_count%4==3){
+			FILE *result;
+			snprintf(path,499,"%s_%d.txt",av[1],_count/4);
+			result = fopen(path,"w");
+			for(x=0;x<2048;x++){
+				fprintf(result,"set%d ",x);
 				for(i=0;i<8;i++){
-					if(i!=7)printf("%d ",slice_set_count[y][i]);
-					else	printf("%d\n",slice_set_count[y][i]);
+					if(i!=7)fprintf(result,"%d ",slice_set_count[x][i]);
+					else	fprintf(result,"%d\n",slice_set_count[x][i]);
 				}
 			}
+			fclose(result);
 			memset(slice_set_count,0,sizeof(int)*2048*8);
 		}
-*/
+		_count ++;
+	}
+	
 	
 	close(pagemap_fd);
 /*
 	for(x=0;x<8;x++) printf("%d\n",single_set_count[x]);
 */
-
+/*
 	FILE *result;
 	result = fopen("result.txt","w");
 	for(x=0;x<2048;x++){
@@ -158,6 +171,6 @@ int main(int ac, char **av)
 		}
 	}
 	fclose(result);
-
+*/
 	return 0;
 }
