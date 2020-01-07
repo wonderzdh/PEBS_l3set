@@ -25,7 +25,7 @@ ${USER_OBJ} ${USER_EXE}: CFLAGS := ${USER_CFLAGS}
 
 dumper: dump-util.o dumper.o
 
-bubble: ${BUBBLE_EXE}
-${BUBBLE_OBJ} ${BUBBLE_EXE}: CFLAGS := ${USER_CFLAGS}
+#bubble: ${BUBBLE_EXE}
+#${BUBBLE_OBJ} ${BUBBLE_EXE}: CFLAGS := ${USER_CFLAGS}
 
 bubble: dump-util.o bubble.o

@@ -101,8 +101,8 @@
 #define EVTSEL_EN  BIT(22)
 
 #define S_PEBS_BUFFER_SIZE	(64 * 1024) /* PEBS buffer size */
-#define OUT_BUFFER_SIZE		(64*64 * 1024) /* must be multiple of 4k */
-#define PERIOD 1
+#define OUT_BUFFER_SIZE		(64 * 64 * 1024) /* must be multiple of 4k */
+#define PERIOD 10
 
 /*
  * Variables used to profile LLC miss ratio (#LLC Miss / #LLC Reference) 
