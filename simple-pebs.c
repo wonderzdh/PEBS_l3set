@@ -154,7 +154,6 @@ static void init_instr(void* arg){
   rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
   tmp = tmp | 0x100000000;
 	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
-
   rdmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
   tmp = tmp | 0x2;
 	wrmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);/*enable fixed counter for #instr*/
@@ -168,17 +167,17 @@ static void init_cycle(void* arg){
 
   rdmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
   tmp = tmp | 0x20;
-
   wrmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);/*enable fixed counter for #cycle*/
 }
 
-/*Disable specific PMC*/
+/*Disable specific PMC and clear counter*/
 static void stop_reference(void* arg){
   unsigned long long tmp;
   rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
   tmp = tmp & 0xfffffffffffffffb;
-	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
   wrmsrl(MSR_IA32_EVNTSEL2, 0);
+  wrmsrl(MSR_IA32_PERFCTR2, 0);
 }
 
 static void stop_miss(void* arg){
@@ -187,7 +186,7 @@ static void stop_miss(void* arg){
   tmp = tmp & 0xfffffffffffffff7;
 	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
   wrmsrl(MSR_IA32_EVNTSEL3, 0);
-
+  wrmsrl(MSR_IA32_PERFCTR3, 0);
 }
 
 static void stop_instr(void* arg){
@@ -199,6 +198,7 @@ static void stop_instr(void* arg){
   rdmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
   tmp = tmp & 0xfffffffffffffffd;
 	wrmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
+  wrmsrl(MSR_FIXED_CTR0, 0);
 }
 
 static void stop_cycle(void* arg){
@@ -209,7 +209,8 @@ static void stop_cycle(void* arg){
 
   rdmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
   tmp = tmp & 0xffffffffffffffdf;
-	wrmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
+  wrmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
+  wrmsrl(MSR_FIXED_CTR1, 0);
 }
 
 /*programable counter2 for LLC-reference*/
