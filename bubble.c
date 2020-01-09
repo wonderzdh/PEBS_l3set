@@ -70,7 +70,7 @@ int virt_to_phys_user(uintptr_t *paddr, int fd, uintptr_t vaddr){
 
 static void usage(void)
 {
-	fprintf(stderr, "Usage: bubble COMMAND [output path]\n-a\tCount all LLC slices/sets\n");
+	fprintf(stderr, "Usage: Review the code carefully or ask Yaocheng for help\n");
 	exit(1);
 }
 
@@ -116,6 +116,10 @@ int main(int ac, char **av)
 				break;
 			case 'd':
 				mode=3;
+				snprintf(path,300,"%s",optarg);
+				break;
+			case 'e':
+				mode=4;
 				snprintf(path,300,"%s",optarg);
 				break;
 
@@ -190,7 +194,11 @@ int main(int ac, char **av)
 
   else if(mode==1){/* print result per phase (Billions of instructions).*/
 		long long int ins_num_pre=0,ins_num_cur=0,ins_diff=0;
-		while(!quit_flag){
+    if(ioctl(pfd[target].fd, INIT_INSTR) < 0){
+			perror("INIT_INSTR");
+		}
+
+    while(!quit_flag){
 			usleep(200000);
 			if(poll(pfd, ncpus, -1)<0)
 				perror("poll");
@@ -247,6 +255,11 @@ int main(int ac, char **av)
 				ins_num_pre=ins_num_cur;
 			}
 		}
+    
+    if(ioctl(pfd[target].fd, STOP_INSTR) < 0){
+			perror("STOP_INSTR");
+		}
+
 	}
 
   else if(mode==2){/* print result when target program finishs*/
@@ -300,15 +313,12 @@ int main(int ac, char **av)
   else if(mode==3){/* print result of first 20 Billion.*/
 		long long int ins_num_pre=0,ins_num_cur=0,ins_diff=0;
     bool first_time=true;
+    if(ioctl(pfd[target].fd, INIT_INSTR) < 0){
+			perror("INIT_INSTR");
+		}
+	
     while(!quit_flag){
-			if(first_time){
-        if(ioctl(pfd[target].fd, GET_CURRENT_INSTR, &ins_num_pre) < 0){
-				  perror("GET_CURRENT_INSTR");
-				  continue;
-        }
-        first_time=false;
-			}
-
+	
       if(poll(pfd, ncpus, -1)<0)
 				perror("poll");
             

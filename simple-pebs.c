@@ -105,7 +105,14 @@
 
 #define S_PEBS_BUFFER_SIZE	(64 * 1024) /* PEBS buffer size */
 #define OUT_BUFFER_SIZE		(64 * 64 * 1024) /* must be multiple of 4k */
-#define PERIOD 1000
+#define PERIOD 1
+
+/* To reduce overhead, we only monitor a small set of LLC set start from SET [MON_SET0] with stride 2048 / NUM_MON_SET*/
+
+#define MON_SET0  10  /* less than stride*/
+#define NUM_MON_SET 64 /* NUM_MON_SET must be integer power of 2 */
+
+static int stride = 2048 / NUM_MON_SET;
 
 /*
  * Variables used to profile LLC miss ratio (#LLC Miss / #LLC Reference) 
@@ -123,8 +130,6 @@ static DEFINE_PER_CPU(unsigned long long,cur_cycle);
 static DEFINE_PER_CPU(unsigned long long,cur_miss);
 
 static DEFINE_PER_CPU(pid_t,cur_pid);/*current core PID*/
-
-unsigned long long llc_reference,llc_miss,instr,cycle;
 
 /* LLC_Reference -> EVNTSEL2
  * LLC_Miss -> EVNTSEL3
@@ -157,6 +162,7 @@ static void init_instr(void* arg){
   rdmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
   tmp = tmp | 0x2;
 	wrmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);/*enable fixed counter for #instr*/
+  wrmsrl(MSR_FIXED_CTR0, 0);
 }
 
 static void init_cycle(void* arg){
@@ -164,10 +170,10 @@ static void init_cycle(void* arg){
   rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
   tmp = tmp | 0x200000000;
 	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
-
   rdmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
   tmp = tmp | 0x20;
   wrmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);/*enable fixed counter for #cycle*/
+  wrmsrl(MSR_FIXED_CTR1, 0);
 }
 
 /*Disable specific PMC and clear counter*/
@@ -215,22 +221,26 @@ static void stop_cycle(void* arg){
 
 /*programable counter2 for LLC-reference*/
 static void get_current_reference(void* arg){
+  unsigned long long llc_reference;
 	rdmsrl(MSR_IA32_PMC2,llc_reference);
 	__this_cpu_write(cur_reference,llc_reference);
 }
 
 /*programable counter3 for LLC-miss*/
 static void get_current_miss(void* arg){
-	rdmsrl(MSR_IA32_PMC3,llc_miss);
+  unsigned long long llc_miss;
+  rdmsrl(MSR_IA32_PMC3,llc_miss);
 	__this_cpu_write(cur_miss,llc_miss);
 }
 
 static void get_current_instr(void* arg){
+  unsigned long long instr;
 	rdmsrl(MSR_FIXED_CTR0,instr);
 	__this_cpu_write(cur_instr,instr);
 }
 
 static void get_current_cycle(void* arg){
+  unsigned long long cycle;
 	rdmsrl(MSR_FIXED_CTR1,cycle);
 	__this_cpu_write(cur_cycle,cycle);
 }
@@ -696,7 +706,10 @@ void simple_pebs_pmi(void)
 	     pebs < end && outbu < outbu_end;
 	     pebs = (struct pebs_v1 *)((char *)pebs + pebs_record_size)) {
 		dla = pebs->dla;
-  	*outbu++ = dla;
+    /*filter: LLC Set[2047] to Set[MON_SET_END] */
+    if( (dla >> 6) & (stride-1) == MON_SET0){
+  	  *outbu++ = dla;
+    }
 	}
 
 	this_cpu_write(out_buffer, outbu);
