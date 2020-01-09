@@ -102,7 +102,7 @@
 
 #define S_PEBS_BUFFER_SIZE	(64 * 1024) /* PEBS buffer size */
 #define OUT_BUFFER_SIZE		(64 * 64 * 1024) /* must be multiple of 4k */
-#define PERIOD 10
+#define PERIOD 1000
 
 /*
  * Variables used to profile LLC miss ratio (#LLC Miss / #LLC Reference) 

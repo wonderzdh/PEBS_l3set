@@ -100,7 +100,7 @@ int main(int ac, char **av)
 	char cpath[500];
 
 	int mode=0;
-	while ((opt = getopt(ac, av, "a:b:c:")) != -1) {
+	while ((opt = getopt(ac, av, "a:b:c:d:")) != -1) {
 		switch(opt){
 			case 'a':
 				mode=0;
@@ -112,6 +112,10 @@ int main(int ac, char **av)
 				break;
 			case 'c':
 				mode=2;
+				snprintf(path,300,"%s",optarg);
+				break;
+			case 'd':
+				mode=3;
 				snprintf(path,300,"%s",optarg);
 				break;
 
@@ -184,7 +188,7 @@ int main(int ac, char **av)
 		}
 	}
 
-	if(mode==1){/* print result per phase (Billions of instructions).*/
+  else if(mode==1){/* print result per phase (Billions of instructions).*/
 		long long int ins_num_pre=0,ins_num_cur=0,ins_diff=0;
 		while(!quit_flag){
 			usleep(200000);
@@ -245,7 +249,7 @@ int main(int ac, char **av)
 		}
 	}
 
-	if(mode==2){/* print result when target program finishs*/
+  else if(mode==2){/* print result when target program finishs*/
 		while(!quit_flag){
 			usleep(200000);
 			if(poll(pfd, ncpus, -1)<0)
@@ -292,5 +296,76 @@ int main(int ac, char **av)
 		}
 		fclose(result);	
 	}
+
+  else if(mode==3){/* print result of first 20 Billion.*/
+		long long int ins_num_pre=0,ins_num_cur=0,ins_diff=0;
+    bool first_time=true;
+    while(!quit_flag){
+			if(first_time){
+        if(ioctl(pfd[target].fd, GET_CURRENT_INSTR, &ins_num_pre) < 0){
+				  perror("GET_CURRENT_INSTR");
+				  continue;
+        }
+        first_time=false;
+			}
+
+      if(poll(pfd, ncpus, -1)<0)
+				perror("poll");
+            
+			if(pfd[target].revents & POLLIN){
+				if(ioctl(pfd[target].fd, SIMPLE_PEBS_GET_OFFSET, &len) < 0){
+					perror("SIMPLE_PEBS_GET_OFFSET");
+					continue;
+				}
+				printf("len:%d\n",len/8);
+				if(len>8000){
+					if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
+						perror("GET_PID");
+						continue;
+					}
+					pagemap_fd = open_pagemap(pid);
+					unsigned long long paddr;
+					unsigned long long *vaddrset=(u64*) map[target];
+					int j;
+
+					for(j=0; j<len/8; j++){
+						virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
+						slice_set_count[(paddr >> 6) & 0x7ff][calculateSlice(paddr)]++;
+	
+					}
+					close(pagemap_fd);
+					
+					if (ioctl(pfd[target].fd, SIMPLE_PEBS_RESET, 0) < 0) {
+						perror("SIMPLE_PEBS_RESET");
+						continue;
+					}
+				}
+			}	
+			
+			if(ioctl(pfd[target].fd, GET_CURRENT_INSTR, &ins_num_cur) < 0){
+				perror("GET_CURRENT_INSTR");
+				continue;
+			}
+		
+			ins_diff = ins_num_cur - ins_num_pre;
+
+			if (ins_diff >= 20000000000){
+				FILE *result;
+				snprintf(cpath,499,"%s_%dB.txt",path,ins_diff/1000000000);
+				result = fopen(cpath,"w");
+				for(x=0;x<2048;x++){
+					fprintf(result,"set%d ",x);
+					for(i=0;i<8;i++){
+						if(i!=7)fprintf(result,"%d ",slice_set_count[x][i]);
+						else	fprintf(result,"%d\n",slice_set_count[x][i]);
+					}
+				}
+				fclose(result);
+        return 0;
+      }
+      else usleep(200000);
+		}
+	}
+
 	return 0;
 }
