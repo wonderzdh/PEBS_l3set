@@ -70,15 +70,18 @@
 #define current get_current()
 
 
-#define MSR_IA32_PERFCTR0    		0x000000c1
+#define MSR_IA32_PERFCTR0               0x000000c1
 #define MSR_IA32_PERFCTR1               0x000000c2
+#define MSR_IA32_PERFCTR2               0x000000c3
+#define MSR_IA32_PERFCTR3               0x000000c4
 
 #define MSR_IA32_EVNTSEL0               0x00000186
 #define MSR_IA32_EVNTSEL1               0x00000187
 #define MSR_IA32_EVNTSEL2               0x00000188
 #define MSR_IA32_EVNTSEL3               0x00000189
-
+/*
 #define MSR_IA32_PMC0                   0x000000c1
+*/
 #define MSR_IA32_PMC1                   0x000000c2
 #define MSR_IA32_PMC2                   0x000000c3
 #define MSR_IA32_PMC3                   0x000000c4
@@ -88,12 +91,12 @@
 
 #define MSR_PERF_FIXED_CTR_CTRL         0x0000038d
 
-#define MSR_IA32_PERF_CABABILITIES  	0x00000345
-#define MSR_IA32_PERF_GLOBAL_STATUS 	0x0000038e
-#define MSR_IA32_PERF_GLOBAL_CTRL 	0x0000038f
+#define MSR_IA32_PERF_CABABILITIES  	  0x00000345
+#define MSR_IA32_PERF_GLOBAL_STATUS 	  0x0000038e
+#define MSR_IA32_PERF_GLOBAL_CTRL 	    0x0000038f
 #define MSR_IA32_PERF_GLOBAL_OVF_CTRL 	0x00000390
-#define MSR_IA32_PEBS_ENABLE		0x000003f1
-#define MSR_IA32_DS_AREA     		0x00000600
+#define MSR_IA32_PEBS_ENABLE		        0x000003f1
+#define MSR_IA32_DS_AREA     		        0x00000600
 
 #define EVTSEL_USR BIT(16)
 #define EVTSEL_OS  0/*BIT(17)*/
@@ -113,7 +116,7 @@
  * counter3 for #LLC Miss
  * fixed counter0 for #instr
  * fixed counter1 for #cycle
-*/
+ */
 static DEFINE_PER_CPU(unsigned long long,cur_reference);
 static DEFINE_PER_CPU(unsigned long long,cur_instr);
 static DEFINE_PER_CPU(unsigned long long,cur_cycle);
@@ -122,6 +125,92 @@ static DEFINE_PER_CPU(unsigned long long,cur_miss);
 static DEFINE_PER_CPU(pid_t,cur_pid);/*current core PID*/
 
 unsigned long long llc_reference,llc_miss,instr,cycle;
+
+/* LLC_Reference -> EVNTSEL2
+ * LLC_Miss -> EVNTSEL3
+ */
+
+/*Enable specific PMC*/
+static void init_reference(void* arg){
+  unsigned long long tmp;
+  rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  tmp = tmp | 0x4;
+	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  wrmsrl(MSR_IA32_EVNTSEL2,
+		0x4f2e | EVTSEL_EN | EVTSEL_USR | EVTSEL_OS);
+}
+
+static void init_miss(void* arg){
+	unsigned long long tmp;
+  rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  tmp = tmp | 0x8;
+	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  wrmsrl(MSR_IA32_EVNTSEL3,
+		0x412e | EVTSEL_EN | EVTSEL_USR | EVTSEL_OS);
+}
+
+static void init_instr(void* arg){
+  unsigned long long tmp;
+  rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  tmp = tmp | 0x100000000;
+	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+
+  rdmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
+  tmp = tmp | 0x2;
+	wrmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);/*enable fixed counter for #instr*/
+}
+
+static void init_cycle(void* arg){
+  unsigned long long tmp;
+  rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  tmp = tmp | 0x200000000;
+	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+
+  rdmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
+  tmp = tmp | 0x20;
+
+  wrmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);/*enable fixed counter for #cycle*/
+}
+
+/*Disable specific PMC*/
+static void stop_reference(void* arg){
+  unsigned long long tmp;
+  rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  tmp = tmp & 0xfffffffffffffffb;
+	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  wrmsrl(MSR_IA32_EVNTSEL2, 0);
+}
+
+static void stop_miss(void* arg){
+  unsigned long long tmp;
+  rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  tmp = tmp & 0xfffffffffffffff7;
+	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  wrmsrl(MSR_IA32_EVNTSEL3, 0);
+
+}
+
+static void stop_instr(void* arg){
+  unsigned long long tmp;
+  rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  tmp = tmp & 0xfffffffeffffffff;
+	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+
+  rdmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
+  tmp = tmp & 0xfffffffffffffffd;
+	wrmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
+}
+
+static void stop_cycle(void* arg){
+  unsigned long long tmp;
+  rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  tmp = tmp & 0xfffffffdffffffff;
+	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+
+  rdmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
+  tmp = tmp & 0xffffffffffffffdf;
+	wrmsrl(MSR_PERF_FIXED_CTR_CTRL, tmp);
+}
 
 /*programable counter2 for LLC-reference*/
 static void get_current_reference(void* arg){
@@ -338,15 +427,24 @@ static void status_dump(char *where)
 
 static void start_stop_cpu(void *arg)
 {
-	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, arg ? 0x30000000d : 0x30000000c);
+	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, arg ? 1 : 0);
 	status_dump("stop");
 }
 
 static void reset_buffer_cpu(void *arg)
 {
-	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, 0x30000000c);
-	__this_cpu_write(out_buffer, __this_cpu_read(out_buffer_base));
-	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, 0x30000000d);
+  unsigned long long tmp;
+  /*Set bit0 to 0*/
+  rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  tmp = tmp & 0xfffffffffffffffe;
+  wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+	
+  __this_cpu_write(out_buffer, __this_cpu_read(out_buffer_base));
+
+  /*Set bit0 to 1*/
+  rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  tmp = tmp | 1;	
+	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
 }
 
 static DEFINE_MUTEX(reset_mutex);
@@ -381,6 +479,33 @@ static long simple_pebs_ioctl(struct file *file, unsigned int cmd,
 		smp_call_function_single(cpu, reset_buffer_cpu, NULL, 1);
 		mutex_unlock(&reset_mutex);
 		return 0;
+  /*deliver some PMU counter to userspace*/
+	case INIT_REFERENCE:
+		smp_call_function_single(cpu, init_reference, NULL, 1);
+		return 0;
+	case INIT_MISS:
+		smp_call_function_single(cpu, init_miss, NULL, 1);
+		return 0;
+	case INIT_INSTR:
+		smp_call_function_single(cpu, init_instr, NULL, 1);
+		return 0;
+	case INIT_CYCLE:
+		smp_call_function_single(cpu, init_cycle, NULL, 1);
+		return 0;
+
+  case STOP_REFERENCE:
+		smp_call_function_single(cpu, stop_reference, NULL, 1);
+		return 0;
+	case STOP_MISS:
+		smp_call_function_single(cpu, stop_miss, NULL, 1);
+		return 0;
+	case STOP_INSTR:
+		smp_call_function_single(cpu, stop_instr, NULL, 1);
+		return 0;
+	case STOP_CYCLE:
+		smp_call_function_single(cpu, stop_cycle, NULL, 1);
+		return 0;
+
 	case GET_CURRENT_REFERENCE:
 		smp_call_function_single(cpu, get_current_reference, NULL, 1);
 		return put_user(per_cpu(cur_reference, cpu), (unsigned long long*)arg);
@@ -542,8 +667,12 @@ void simple_pebs_pmi(void)
 	pid_t current_pid = task_pid_nr(current);
 	this_cpu_write(cur_pid,current_pid);
 
+  unsigned long long tmp;
 	/* disable PMU */
-	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, 0x30000000c);
+  rdmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  tmp = tmp & 0xfffffffffffffffe;
+  wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+
 
 	/* global status ack */
 	wrmsrl(MSR_IA32_PERF_GLOBAL_OVF_CTRL, 1ULL << 62);
@@ -553,7 +682,7 @@ void simple_pebs_pmi(void)
 	status_dump("pmi2");
 	
 	/*
-	Extended by yaocheng. Get target process's PID and then check its pagemap from /proc/$PID/pagemap.
+	Extended by yaocheng to get target process's PID and then check its pagemap from /proc/$PID/pagemap.
 	*/	
 	uint64_t dla;	
 	/* write data to buffer */
@@ -566,12 +695,7 @@ void simple_pebs_pmi(void)
 	     pebs < end && outbu < outbu_end;
 	     pebs = (struct pebs_v1 *)((char *)pebs + pebs_record_size)) {
 		dla = pebs->dla;
-    /*    printk(KERN_DEBUG"dla %u,dse %u,lat %u,ip %u\n",dla,pebs->dse,pebs->lat,pebs->ip);
-		if (pebs_record_size >= sizeof(struct pebs_v2))
-			ip = ((struct pebs_v2 *)pebs)->eventing_ip;
-
-    */
-		*outbu++ = dla;
+  	*outbu++ = dla;
 	}
 
 	this_cpu_write(out_buffer, outbu);
@@ -602,9 +726,10 @@ void simple_pebs_pmi(void)
 		wake_up(this_cpu_ptr(&simple_pebs_wait));
 
 
-    } else
-		wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, 0x30000000d);
-
+  } else{
+    tmp = tmp | 1;
+    wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, tmp);
+  }
 	status_dump("pmi3");
 }
 
@@ -702,22 +827,11 @@ static void simple_pebs_cpu_init(void *arg)
 	wrmsrl(MSR_IA32_EVNTSEL0,
 		pebs_event | EVTSEL_EN | EVTSEL_USR | EVTSEL_OS);
 
-	/* LLC_Reference -> EVNTSEL2
-	 * LLC_Miss -> EVNTSEL3
-	 */
-	wrmsrl(MSR_IA32_EVNTSEL2,
-		0x4f2e | EVTSEL_EN | EVTSEL_USR | EVTSEL_OS);
-
-	wrmsrl(MSR_IA32_EVNTSEL3,
-		0x412e | EVTSEL_EN | EVTSEL_USR | EVTSEL_OS);
 
 	/* Enable PEBS for counter 0 */
 	wrmsrl(MSR_IA32_PEBS_ENABLE, 1);
 
-	wrmsrl(MSR_PERF_FIXED_CTR_CTRL, 0x22);/*enable fixed counter for #instr and #cycle*/
-
-	wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, 0x30000000d);/*modified. enable pmc2 and pmc3 to get miss ratio*/
-
+  wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, 1);/*modified. enable pmc2 and pmc3 to get miss ratio*/
 	__this_cpu_write(cpu_initialized, 1);
 }
 
@@ -728,6 +842,12 @@ static void simple_pebs_cpu_reset(void *arg)
 		wrmsrl(MSR_IA32_PEBS_ENABLE, 0);
 		wrmsrl(MSR_IA32_EVNTSEL0, 0);
 		wrmsrl(MSR_IA32_PERFCTR0, 0);
+    wrmsrl(MSR_IA32_EVNTSEL2, 0);
+		wrmsrl(MSR_IA32_PERFCTR2, 0);
+  	wrmsrl(MSR_IA32_EVNTSEL3, 0);
+		wrmsrl(MSR_IA32_PERFCTR3, 0);
+    wrmsrl(MSR_PERF_FIXED_CTR_CTRL, 0);
+
 		wrmsrl(MSR_IA32_DS_AREA, __this_cpu_read(cpu_old_ds));
 		apic_write(APIC_LVTPC, __this_cpu_read(old_lvtpc));
 		__this_cpu_write(cpu_initialized, 0);
