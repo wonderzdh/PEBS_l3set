@@ -707,7 +707,7 @@ void simple_pebs_pmi(void)
 	     pebs = (struct pebs_v1 *)((char *)pebs + pebs_record_size)) {
 		dla = pebs->dla;
     /*filter: LLC Set[2047] to Set[MON_SET_END] */
-    if( (dla >> 6) & (stride-1) == MON_SET0){
+    if( ( (dla >> 6) & (stride-1) ) == MON_SET0){
   	  *outbu++ = dla;
     }
 	}

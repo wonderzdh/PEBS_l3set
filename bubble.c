@@ -25,12 +25,16 @@
 #define hash_1 0x2EB5FAA880
 #define hash_2 0x3CCCC93100
 
+#define NUM_MON_SET 64
+#define MON_SET0  10
+
 unsigned long long TARGETSET=705;
 
 int quit_flag=0;
 
 int slice_set_count[2048][8]={0};
 int single_set_count[8]={0};
+int mon_set_count[64]={0};
 
 uint64_t rte_xorall64(uint64_t ma) {
 	return __builtin_parityll(ma);
@@ -100,7 +104,7 @@ int main(int ac, char **av)
 	char cpath[500];
 
 	int mode=0;
-	while ((opt = getopt(ac, av, "a:b:c:d:")) != -1) {
+	while ((opt = getopt(ac, av, "a:b:c:d:e:")) != -1) {
 		switch(opt){
 			case 'a':
 				mode=0;
@@ -376,6 +380,49 @@ int main(int ac, char **av)
       else usleep(200000);
 		}
 	}
+  else if(mode==4){/* Monitor a specific set of LLC set. */
+		long long int ins_num_pre=0,ins_num_cur=0,ins_diff=0;
+    bool first_time=true;  	
+    while(!quit_flag){
+      usleep(1000000);
+      if(poll(pfd, ncpus, -1)<0)
+				perror("poll");
+            
+			if(pfd[target].revents & POLLIN){
+				if(ioctl(pfd[target].fd, SIMPLE_PEBS_GET_OFFSET, &len) < 0){
+					perror("SIMPLE_PEBS_GET_OFFSET");
+					continue;
+				}
+				printf("len:%d\n",len/8);
+				
+					if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
+						perror("GET_PID");
+						continue;
+					}
+					pagemap_fd = open_pagemap(pid);
+					unsigned long long paddr;
+					unsigned long long *vaddrset=(u64*) map[target];
+					int j;
 
+					for(j=0; j<len/8; j++){
+						virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
+						mon_set_count[(paddr >> 11) & 0x3f] ++;	
+					}
+					close(pagemap_fd);
+					
+					if (ioctl(pfd[target].fd, SIMPLE_PEBS_RESET, 0) < 0) {
+						perror("SIMPLE_PEBS_RESET");
+						continue;
+					}
+			}	
+		}
+		FILE *result;
+		snprintf(cpath,499,"%s.txt",path);
+		result = fopen(cpath,"w");
+	  for(x=0;x<64;x++){
+		 	fprintf(result,"set%d %d\n",x,mon_set_count[x]);
+		}
+		fclose(result);
+	}
 	return 0;
 }
