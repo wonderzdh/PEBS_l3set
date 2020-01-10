@@ -34,6 +34,7 @@ int quit_flag=0;
 
 int slice_set_count[2048][8]={0};
 int single_set_count[8]={0};
+int total_slice_count[2048]={0};
 int mon_set_count[64]={0};
 
 uint64_t rte_xorall64(uint64_t ma) {
@@ -136,7 +137,7 @@ int main(int ac, char **av)
 
 	signal(SIGINT, handler);
 
-	if(mode==0){
+	if(mode==0){/* print result per second  */
 		struct timespec start_time,cur_time;
 		long long int time_diff=0;
 		clock_gettime(CLOCK_MONOTONIC,&start_time);
@@ -277,7 +278,7 @@ int main(int ac, char **av)
 					continue;
 				}
 				printf("len:%d\n",len/8);
-				if(len>1600000){
+				if(1){
 					if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
 						perror("GET_PID");
 						continue;
@@ -289,8 +290,8 @@ int main(int ac, char **av)
 
 					for(j=0; j<len/8; j++){
 						virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
-						slice_set_count[(paddr >> 6) & 0x7ff][calculateSlice(paddr)]++;
-	
+						/*slice_set_count[(paddr >> 6) & 0x7ff][calculateSlice(paddr)]++;*/
+            total_slice_count[(paddr >> 6) & 0x7ff]++;
 					}
 					close(pagemap_fd);
 					
@@ -304,13 +305,20 @@ int main(int ac, char **av)
 		FILE *result;
 		snprintf(cpath,499,"%s.txt",path);
 		result = fopen(cpath,"w");
-		for(x=0;x<2048;x++){
+    
+    for(x=0;x<2048;x++){
+      fprintf(result,"%d\n",total_slice_count[x]);
+    }
+    /* print different slice
+
+    for(x=0;x<2048;x++){
 			fprintf(result,"set%d ",x);
 			for(i=0;i<8;i++){
 				if(i!=7)fprintf(result,"%d ",slice_set_count[x][i]);
 				else	fprintf(result,"%d\n",slice_set_count[x][i]);
-			}
+      }
 		}
+    */
 		fclose(result);	
 	}
 

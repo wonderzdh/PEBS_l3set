@@ -109,7 +109,7 @@
 
 /* To reduce overhead, we only monitor a small set of LLC set start from SET [MON_SET0] with stride 2048 / NUM_MON_SET*/
 
-#define MON_SET0  10  /* less than stride*/
+#define MON_SET0  10  /* less than stride */
 #define NUM_MON_SET 64 /* NUM_MON_SET must be integer power of 2 */
 
 static int stride = 2048 / NUM_MON_SET;
@@ -706,8 +706,8 @@ void simple_pebs_pmi(void)
 	     pebs < end && outbu < outbu_end;
 	     pebs = (struct pebs_v1 *)((char *)pebs + pebs_record_size)) {
 		dla = pebs->dla;
-    /*filter: LLC Set[2047] to Set[MON_SET_END] */
-    if( ( (dla >> 6) & (stride-1) ) == MON_SET0){
+    /*filter: LLC Set[ MON_SET_END + stride*X ] */
+    if( ( (dla >> 6) & (stride-1 < 64 ? stride-1 : 64) ) == ( MON_SET0 & 0x3f )){
   	  *outbu++ = dla;
     }
 	}
