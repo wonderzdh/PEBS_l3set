@@ -25,10 +25,8 @@
 #define hash_1 0x2EB5FAA880
 #define hash_2 0x3CCCC93100
 
-#define NUM_MON_SET 64
+#define NUM_MON_SET 16
 #define MON_SET0  10
-
-unsigned long long TARGETSET=705;
 
 int quit_flag=0;
 
@@ -98,9 +96,8 @@ int main(int ac, char **av)
 	int pagemap_fd;
 	int x=0;
 	int phase_count=0;
-	unsigned long long vaddr_filter = (TARGETSET & 0x3f)<<6;
 	
-	int len = 0;
+  int len = 0;
 	char path[500];
 	char cpath[500];
 
@@ -414,7 +411,7 @@ int main(int ac, char **av)
 
 					for(j=0; j<len/8; j++){
 						virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
-						mon_set_count[(paddr >> 11) & 0x3f] ++;	
+						mon_set_count[(paddr >> 13) & 0xf] ++;	
 					}
 					close(pagemap_fd);
 					
@@ -427,7 +424,7 @@ int main(int ac, char **av)
 		FILE *result;
 		snprintf(cpath,499,"%s.txt",path);
 		result = fopen(cpath,"w");
-	  for(x=0;x<64;x++){
+	  for(x=0;x<16;x++){
 		 	fprintf(result,"set%d %d\n",x,mon_set_count[x]);
 		}
 		fclose(result);
