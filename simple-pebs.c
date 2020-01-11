@@ -105,14 +105,25 @@
 
 #define S_PEBS_BUFFER_SIZE	(64 * 1024) /* PEBS buffer size */
 #define OUT_BUFFER_SIZE		(64 * 64 * 1024) /* must be multiple of 4k */
+
 #define PERIOD 1
 
+#define LLC_SET_NUM 2048
 /* To reduce overhead, we only monitor a small set of LLC set start from SET [MON_SET0] with stride 2048 / NUM_MON_SET*/
 
-#define MON_SET0  10  /* less than stride */
-#define NUM_MON_SET 16 /* NUM_MON_SET must be integer power of 2 */
+static DEFINE_PER_CPU(int, num_mon_set); /* NUM_MON_SET must be integer power of 2 */
 
-static int stride = 2048 / NUM_MON_SET;
+static DEFINE_PER_CPU(int, mon_set0); /* first set we monitor, less than 2048/num_mon_set */
+
+static void set_monitored_num(void* arg){
+  struct mon_set_para val;
+  if( copy_from_user(&val, (struct mon_set_para *) arg, sizeof(struct mon_set_para)) ){
+    printk("MON_SET_PARA error\n"); 
+    return;
+  }
+  __this_cpu_write(num_mon_set, val.num);
+  __this_cpu_write(mon_set0, val.index0);
+}
 
 /*
  * Variables used to profile LLC miss ratio (#LLC Miss / #LLC Reference) 
@@ -531,7 +542,10 @@ static long simple_pebs_ioctl(struct file *file, unsigned int cmd,
 		return put_user(per_cpu(cur_cycle, cpu),(unsigned long long*)arg);
 	case GET_PID:
 		return put_user(per_cpu(cur_pid, cpu),(pid_t*)arg);
-	default:
+  
+  case SET_MON_NUM:
+   smp_call_function_single(cpu, set_monitored_num, (void*) arg, 1); 
+  default:
 		return -ENOTTY;
 	}
 }
@@ -672,6 +686,7 @@ void simple_pebs_pmi(void)
 	struct s_debug_store *ds;
 	struct pebs_v1 *pebs, *end;
 	u64 *outbu, *outbu_end, *outbu_start;
+  int num_set, set0, stride;/* monitored llc set parameters*/
 
 	status_dump("pmi1");
 	
@@ -702,12 +717,26 @@ void simple_pebs_pmi(void)
 	outbu = __this_cpu_read(out_buffer);
 	outbu_end = __this_cpu_read(out_buffer_end);
 	end = (struct pebs_v1 *)ds->pebs_index;
+
+  num_set = __this_cpu_read(num_mon_set);
+  set0 = __this_cpu_read(mon_set0);
+  int _count = 0;
+
+  while( num_set != 0){ 
+    num_set >>= 1; 
+    _count += 1; 
+  } 
+  _count = _count-1;
+  stride = LLC_SET_NUM / (1 << _count);
+  int _mask = stride < 64 ? (stride-1) : 63;
+
 	for (pebs = (struct pebs_v1 *)ds->pebs_base;
 	     pebs < end && outbu < outbu_end;
 	     pebs = (struct pebs_v1 *)((char *)pebs + pebs_record_size)) {
 		dla = pebs->dla;
     /*filter: LLC Set[ MON_SET_END + stride*X ] */
-    if( ( (dla >> 6) & (stride < 64 ? stride-1 : 63) ) == ( MON_SET0 & 0x3f )){
+
+    if( ( (dla >> 6) & _mask ) == ( set0 & _mask )){
       *outbu++ = dla;
     }
 	}
@@ -795,6 +824,9 @@ static DEFINE_PER_CPU(int, cpu_initialized);
 
 static void simple_pebs_cpu_init(void *arg)
 {
+  __this_cpu_write(num_mon_set, 64);
+  __this_cpu_write(mon_set0, 13);
+
 	u64 val;
 	unsigned long old_ds;
 
@@ -844,9 +876,10 @@ static void simple_pebs_cpu_init(void *arg)
 
 	/* Enable PEBS for counter 0 */
 	wrmsrl(MSR_IA32_PEBS_ENABLE, 1);
-
-  wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, 1);/*modified. enable pmc2 and pmc3 to get miss ratio*/
-	__this_cpu_write(cpu_initialized, 1);
+  /*
+  wrmsrl(MSR_IA32_PERF_GLOBAL_CTRL, 1);
+  */
+  __this_cpu_write(cpu_initialized, 1);
 }
 
 static void simple_pebs_cpu_reset(void *arg)

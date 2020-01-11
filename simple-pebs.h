@@ -20,3 +20,11 @@
 #define STOP_MISS 0x8010
 #define STOP_INSTR  0x8011
 #define STOP_CYCLE  0x8012
+#define SET_MON_NUM 0x8013
+
+struct mon_set_para{
+  int num;/*num_mon_set*/
+  int index0;/*mon_set0*/
+};
+
+

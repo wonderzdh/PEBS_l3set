@@ -36,9 +36,10 @@ void open_cpu(void **mapp, int cnum, struct pollfd *pfd, int size)
 	int fd = device_open();
 	if (ioctl(fd, SIMPLE_PEBS_SET_CPU, cnum) < 0)
 		err("SIMPLE_PEBS_SET_CPU");
-	if (ioctl(fd, SIMPLE_PEBS_START, 0) < 0)
+/*	if (ioctl(fd, SIMPLE_PEBS_START, 0) < 0)
 		err("SIMPLE_PEBS_START");
-	void *map = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+*/
+    void *map = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (map == (void *)-1)
 		err("mmap");
 	*mapp = map;

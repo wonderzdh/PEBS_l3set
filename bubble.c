@@ -25,9 +25,7 @@
 #define hash_1 0x2EB5FAA880
 #define hash_2 0x3CCCC93100
 
-#define NUM_MON_SET 16
-#define MON_SET0  10
-
+int num_mon_set, mon_set0;
 int quit_flag=0;
 
 int slice_set_count[2048][8]={0};
@@ -89,10 +87,14 @@ int main(int ac, char **av)
 	struct pollfd pfd[ncpus];
 	int opt;
 	int i;
-	for (i = 0; i < ncpus; i++)
+  int target = 7;
+
+	/*
+  for (i = 0; i < ncpus; i++)
 		open_cpu(&map[i], i, &pfd[i], size);
-	int target = 7;
-	pid_t pid;
+	*/
+  open_cpu(&map[target], target, &pfd[target], size);
+  pid_t pid;
 	int pagemap_fd;
 	int x=0;
 	int phase_count=0;
@@ -102,8 +104,12 @@ int main(int ac, char **av)
 	char cpath[500];
 
 	int mode=0;
-	while ((opt = getopt(ac, av, "a:b:c:d:e:")) != -1) {
+	while ((opt = getopt(ac, av, "n:s:a:b:c:d:e:")) != -1) {
 		switch(opt){
+      case 'n':
+        num_mon_set = atoi(optarg);
+      case 's':
+        mon_set0 = atoi(optarg);
 			case 'a':
 				mode=0;
 				snprintf(path,300,"%s",optarg);
@@ -266,7 +272,7 @@ int main(int ac, char **av)
 
   else if(mode==2){/* print result when target program finishs*/
 		while(!quit_flag){
-			usleep(200000);
+			usleep(1000000);
 			if(poll(pfd, ncpus, -1)<0)
 				perror("poll");
 			if(pfd[target].revents & POLLIN){
@@ -387,7 +393,28 @@ int main(int ac, char **av)
 	}
   else if(mode==4){/* Monitor a specific set of LLC set. */
 		long long int ins_num_pre=0,ins_num_cur=0,ins_diff=0;
-    bool first_time=true;  	
+    bool first_time=true;
+    struct mon_set_para val;
+    val.num = num_mon_set;
+    val.index0 = mon_set0;
+
+    ioctl(pfd[target].fd, SET_MON_NUM, &val);
+
+    ioctl(pfd[target].fd, SIMPLE_PEBS_START, 0);
+    int stride =0;
+    int _count = 0;
+    int tmp = num_mon_set;
+    while( tmp != 0){ 
+      tmp >>= 1; 
+      _count += 1; 
+    }
+    _count=_count-1;
+    stride = 2048 / (1 << _count);
+    
+    int x1 = (1 << (11 - _count)) - 1;
+    int x2 = 17 - _count;
+    int x3 = (1 << _count ) -1 ;
+    
     while(!quit_flag){
       usleep(1000000);
       if(poll(pfd, ncpus, -1)<0)
@@ -411,7 +438,9 @@ int main(int ac, char **av)
 
 					for(j=0; j<len/8; j++){
 						virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
-						mon_set_count[(paddr >> 13) & 0xf] ++;	
+              if ( ( (paddr >> 6) & x1) == mon_set0){
+						  mon_set_count[ (paddr >> x2) & x3 ] ++;
+            }
 					}
 					close(pagemap_fd);
 					
@@ -424,7 +453,7 @@ int main(int ac, char **av)
 		FILE *result;
 		snprintf(cpath,499,"%s.txt",path);
 		result = fopen(cpath,"w");
-	  for(x=0;x<16;x++){
+	  for(x=0;x<num_mon_set;x++){
 		 	fprintf(result,"set%d %d\n",x,mon_set_count[x]);
 		}
 		fclose(result);
