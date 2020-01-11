@@ -718,7 +718,7 @@ void simple_pebs_pmi(void)
 	outbu_end = __this_cpu_read(out_buffer_end);
 	end = (struct pebs_v1 *)ds->pebs_index;
 
-  num_set = __this_cpu_read(num_mon_set);
+  num_set = __this_cpu_read(num_mon_set) -1;
   set0 = __this_cpu_read(mon_set0);
   int _count = 0;
 
@@ -726,7 +726,7 @@ void simple_pebs_pmi(void)
     num_set >>= 1; 
     _count += 1; 
   } 
-  _count = _count-1;
+  
   stride = LLC_SET_NUM / (1 << _count);
   int _mask = stride < 64 ? (stride-1) : 63;
 

@@ -403,12 +403,12 @@ int main(int ac, char **av)
     ioctl(pfd[target].fd, SIMPLE_PEBS_START, 0);
     int stride =0;
     int _count = 0;
-    int tmp = num_mon_set;
+    int tmp = num_mon_set -1;
     while( tmp != 0){ 
       tmp >>= 1; 
       _count += 1; 
     }
-    _count=_count-1;
+
     stride = 2048 / (1 << _count);
     
     int x1 = (1 << (11 - _count)) - 1;
