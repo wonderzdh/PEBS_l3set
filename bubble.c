@@ -31,7 +31,7 @@ int quit_flag=0;
 int slice_set_count[2048][8]={0};
 int single_set_count[8]={0};
 int total_slice_count[2048]={0};
-int mon_set_count[64]={0};
+int mon_set_count[2048]={0};
 
 uint64_t rte_xorall64(uint64_t ma) {
 	return __builtin_parityll(ma);
@@ -398,7 +398,10 @@ int main(int ac, char **av)
     val.num = num_mon_set;
     val.index0 = mon_set0;
 
-    ioctl(pfd[target].fd, SET_MON_NUM, &val);
+    if(ioctl(pfd[target].fd, SET_MON_NUM, &val)<0){
+      printf("input set pararmeter error!\n");
+      return 0;
+    }
 
     ioctl(pfd[target].fd, SIMPLE_PEBS_START, 0);
     int stride =0;
@@ -414,7 +417,6 @@ int main(int ac, char **av)
     int x1 = (1 << (11 - _count)) - 1;
     int x2 = 17 - _count;
     int x3 = (1 << _count ) -1 ;
-    
     while(!quit_flag){
       usleep(1000000);
       if(poll(pfd, ncpus, -1)<0)
@@ -425,7 +427,8 @@ int main(int ac, char **av)
 					perror("SIMPLE_PEBS_GET_OFFSET");
 					continue;
 				}
-				printf("len:%d\n",len/8);
+				
+        printf("len:%d\n",len/8);
 				
 					if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
 						perror("GET_PID");
@@ -439,6 +442,7 @@ int main(int ac, char **av)
 					for(j=0; j<len/8; j++){
 						virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
               if ( ( (paddr >> 6) & x1) == mon_set0){
+              
 						  mon_set_count[ (paddr >> x2) & x3 ] ++;
             }
 					}

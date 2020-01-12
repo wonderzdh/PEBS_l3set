@@ -109,18 +109,22 @@
 #define PERIOD 1
 
 #define LLC_SET_NUM 2048
+/* initial para*/
+#define NUM_MON_SET 128
+#define MON_SET0 13
 /* To reduce overhead, we only monitor a small set of LLC set start from SET [MON_SET0] with stride 2048 / NUM_MON_SET*/
 
 static DEFINE_PER_CPU(int, num_mon_set); /* NUM_MON_SET must be integer power of 2 */
 
 static DEFINE_PER_CPU(int, mon_set0); /* first set we monitor, less than 2048/num_mon_set */
 
-static void set_monitored_num(void* arg){
+static void set_monitored_num(unsigned long arg){
   struct mon_set_para val;
-  if( copy_from_user(&val, (struct mon_set_para *) arg, sizeof(struct mon_set_para)) ){
+  if( copy_from_user(&val, (void*) arg, sizeof(struct mon_set_para)) ){
     printk("MON_SET_PARA error\n"); 
     return;
   }
+  printk("num_mon_set %d mon_set0 %d\n",val.num,val.index0);
   __this_cpu_write(num_mon_set, val.num);
   __this_cpu_write(mon_set0, val.index0);
 }
@@ -544,7 +548,8 @@ static long simple_pebs_ioctl(struct file *file, unsigned int cmd,
 		return put_user(per_cpu(cur_pid, cpu),(pid_t*)arg);
   
   case SET_MON_NUM:
-   smp_call_function_single(cpu, set_monitored_num, (void*) arg, 1); 
+    smp_call_function_single(cpu, set_monitored_num,  arg, 1); 
+    return 0;
   default:
 		return -ENOTTY;
 	}
@@ -720,6 +725,9 @@ void simple_pebs_pmi(void)
 
   num_set = __this_cpu_read(num_mon_set) -1;
   set0 = __this_cpu_read(mon_set0);
+  /*
+  printk("num_set %d set0 %d\n",num_set,set0);
+  */
   int _count = 0;
 
   while( num_set != 0){ 
@@ -728,16 +736,18 @@ void simple_pebs_pmi(void)
   } 
   
   stride = LLC_SET_NUM / (1 << _count);
-  int _mask = stride < 64 ? (stride-1) : 63;
-
-	for (pebs = (struct pebs_v1 *)ds->pebs_base;
+  int _mask = (stride < 64) ? (stride-1) : 63;
+/*
+  printk("%d %d %d %lx %d\n",num_set,_count,stride,_mask,set0);
+*/
+  for (pebs = (struct pebs_v1 *)ds->pebs_base;
 	     pebs < end && outbu < outbu_end;
 	     pebs = (struct pebs_v1 *)((char *)pebs + pebs_record_size)) {
 		dla = pebs->dla;
     /*filter: LLC Set[ MON_SET_END + stride*X ] */
 
     if( ( (dla >> 6) & _mask ) == ( set0 & _mask )){
-      *outbu++ = dla;
+      *outbu++ = dla; 
     }
 	}
 
@@ -824,8 +834,8 @@ static DEFINE_PER_CPU(int, cpu_initialized);
 
 static void simple_pebs_cpu_init(void *arg)
 {
-  __this_cpu_write(num_mon_set, 64);
-  __this_cpu_write(mon_set0, 13);
+  __this_cpu_write(num_mon_set, NUM_MON_SET);
+  __this_cpu_write(mon_set0, MON_SET0);
 
 	u64 val;
 	unsigned long old_ds;
