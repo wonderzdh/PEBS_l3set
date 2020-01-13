@@ -271,6 +271,7 @@ int main(int ac, char **av)
 	}
 
   else if(mode==2){/* print result when target program finishs*/
+		ioctl(pfd[target].fd, SIMPLE_PEBS_START, 0);
 		while(!quit_flag){
 			usleep(1000000);
 			if(poll(pfd, ncpus, -1)<0)
@@ -397,12 +398,12 @@ int main(int ac, char **av)
     struct mon_set_para val;
     val.num = num_mon_set;
     val.index0 = mon_set0;
-
+/*
     if(ioctl(pfd[target].fd, SET_MON_NUM, &val)<0){
       printf("input set pararmeter error!\n");
       return 0;
     }
-
+*/
     ioctl(pfd[target].fd, SIMPLE_PEBS_START, 0);
     int stride =0;
     int _count = 0;
