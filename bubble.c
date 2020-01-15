@@ -216,7 +216,8 @@ int main(int ac, char **av)
 					continue;
 				}
 				printf("len:%d\n",len/8);
-				if(len>160000){
+				/*if(len>160000){*/
+
 					if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
 						perror("GET_PID");
 						continue;
@@ -237,7 +238,7 @@ int main(int ac, char **av)
 						perror("SIMPLE_PEBS_RESET");
 						continue;
 					}
-				}
+			/*	}*/
 			}	
 			
 			if(ioctl(pfd[target].fd, GET_CURRENT_INSTR, &ins_num_cur) < 0){
@@ -329,6 +330,8 @@ int main(int ac, char **av)
   else if(mode==3){/* print result of first 20 Billion.*/
 		long long int ins_num_pre=0,ins_num_cur=0,ins_diff=0;
     bool first_time=true;
+    ioctl(pfd[target].fd, SIMPLE_PEBS_START, 0);
+
     if(ioctl(pfd[target].fd, INIT_INSTR) < 0){
 			perror("INIT_INSTR");
 		}
@@ -375,7 +378,7 @@ int main(int ac, char **av)
 		
 			ins_diff = ins_num_cur - ins_num_pre;
 
-			if (ins_diff >= 20000000000){
+			if (ins_diff >= 4000000000){
 				FILE *result;
 				snprintf(cpath,499,"%s_%dB.txt",path,ins_diff/1000000000);
 				result = fopen(cpath,"w");

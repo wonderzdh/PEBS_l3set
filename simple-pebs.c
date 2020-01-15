@@ -110,7 +110,7 @@
 
 #define LLC_SET_NUM 2048
 /* initial para*/
-#define NUM_MON_SET 128
+#define NUM_MON_SET 64
 #define MON_SET0 13
 /* To reduce overhead, we only monitor a small set of LLC set start from SET [MON_SET0] with stride 2048 / NUM_MON_SET*/
 
