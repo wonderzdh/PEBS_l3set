@@ -26,6 +26,7 @@
 #define hash_2 0x3CCCC93100
 
 int num_mon_set, mon_set0;
+long long int ins_start,ins_len;
 int quit_flag=0;
 
 int slice_set_count[2048][8]={0};
@@ -104,12 +105,16 @@ int main(int ac, char **av)
 	char cpath[500];
 
 	int mode=0;
-	while ((opt = getopt(ac, av, "n:s:a:b:c:d:e:")) != -1) {
+	while ((opt = getopt(ac, av, "n:s:x:y:a:b:c:d:e:f:")) != -1) {
 		switch(opt){
       case 'n':
         num_mon_set = atoi(optarg);
       case 's':
         mon_set0 = atoi(optarg);
+      case 'x':
+        ins_start = atoi(optarg);
+      case 'y':
+        ins_len = atoi(optarg);
 			case 'a':
 				mode=0;
 				snprintf(path,300,"%s",optarg);
@@ -130,6 +135,11 @@ int main(int ac, char **av)
 				mode=4;
 				snprintf(path,300,"%s",optarg);
 				break;
+			case 'f':
+				mode=5;
+				snprintf(path,300,"%s",optarg);
+				break;
+
 
 			default:
 				usage();
@@ -466,5 +476,103 @@ int main(int ac, char **av)
 		}
 		fclose(result);
 	}
+  
+  else if(mode==5){/* Monitor a specific set of LLC set, given #instruction (million) to start and length to monitor*/
+		long long int ins_num_pre=0,ins_num_cur=0,ins_diff=0;
+    bool first_time=true;
+    struct mon_set_para val;
+    val.num = num_mon_set;
+    val.index0 = mon_set0;
+  
+    long long int ins_stop = ins_start + ins_len;
+    if(ioctl(pfd[target].fd, INIT_INSTR) < 0){
+      perror("INIT_INSTR");
+    }
+
+    while((ins_num_cur/1000000) < ins_start){
+      usleep(10000);
+      if(ioctl(pfd[target].fd, GET_CURRENT_INSTR, &ins_num_cur) < 0){
+        perror("GET_CURRENT_INSTR");
+      }
+      
+      printf("ins_num_cur:%lld\n",ins_num_cur);
+    
+    }
+    /*
+    ioctl(pfd[target].fd, STOP_INSTR); 
+    */
+    ioctl(pfd[target].fd, SIMPLE_PEBS_START, 0);
+    if(ioctl(pfd[target].fd, INIT_INSTR) < 0){
+      perror("INIT_INSTR");
+    }
+
+    int stride =0;
+    int _count = 0;
+    int tmp = num_mon_set -1;
+    while( tmp != 0){ 
+      tmp >>= 1; 
+      _count += 1; 
+    }
+
+    stride = 2048 / (1 << _count);
+    
+    int x1 = (1 << (11 - _count)) - 1;
+    int x2 = 17 - _count;
+    int x3 = (1 << _count ) -1 ;
+    while((ins_num_cur/1000000) < ins_stop){
+      usleep(100000);
+      
+      if(ioctl(pfd[target].fd, GET_CURRENT_INSTR, &ins_num_cur) < 0){
+        perror("GET_CURRENT_INSTR");
+      }
+
+      if(poll(pfd, ncpus, -1)<0)
+				perror("poll");
+            
+			if(pfd[target].revents & POLLIN){
+				if(ioctl(pfd[target].fd, SIMPLE_PEBS_GET_OFFSET, &len) < 0){
+					perror("SIMPLE_PEBS_GET_OFFSET");
+					continue;
+				}
+				
+        printf("len:%d cur_ins:%lld\n",len/8,ins_num_cur);
+				
+					if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
+						perror("GET_PID");
+						continue;
+					}
+					pagemap_fd = open_pagemap(pid);
+					unsigned long long paddr;
+					unsigned long long *vaddrset=(u64*) map[target];
+					int j;
+
+					for(j=0; j<len/8; j++){
+						virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
+              if ( ( (paddr >> 6) & x1) == mon_set0){
+              
+						  mon_set_count[ (paddr >> x2) & x3 ] ++;
+            }
+					}
+					close(pagemap_fd);
+					
+					if (ioctl(pfd[target].fd, SIMPLE_PEBS_RESET, 0) < 0) {
+						perror("SIMPLE_PEBS_RESET");
+						continue;
+					}
+			}	
+		}
+		FILE *result;
+		snprintf(cpath,499,"%s.txt",path);
+		result = fopen(cpath,"w");
+	  for(x=0;x<num_mon_set;x++){
+		 	fprintf(result,"set%d %d\n",x,mon_set_count[x]);
+		}
+		fclose(result);
+
+    if(ioctl(pfd[target].fd, STOP_INSTR) < 0){
+      perror("STOP_INSTR");
+    }
+	}
+
 	return 0;
 }
