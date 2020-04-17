@@ -88,14 +88,13 @@ int main(int ac, char **av)
 	struct pollfd pfd[ncpus];
 	int opt;
 	int i;
-  int target = 7;
+  int target = 1;
 
 	/*
   for (i = 0; i < ncpus; i++)
 		open_cpu(&map[i], i, &pfd[i], size);
 	*/
-  open_cpu(&map[target], target, &pfd[target], size);
-  pid_t pid;
+   pid_t pid;
 	int pagemap_fd;
 	int x=0;
 	int phase_count=0;
@@ -105,8 +104,10 @@ int main(int ac, char **av)
 	char cpath[500];
 
 	int mode=0;
-	while ((opt = getopt(ac, av, "n:s:x:y:a:b:c:d:e:f:")) != -1) {
+	while ((opt = getopt(ac, av, "t:n:s:x:y:a:b:c:d:e:f:")) != -1) {
 		switch(opt){
+      case 't':
+	target = atoi(optarg);
       case 'n':
         num_mon_set = atoi(optarg);
       case 's':
@@ -147,6 +148,7 @@ int main(int ac, char **av)
 				break;
 		}
 	}
+	open_cpu(&map[target], target, &pfd[target], size);
 
 	signal(SIGINT, handler);
 
@@ -418,6 +420,7 @@ int main(int ac, char **av)
     }
 */
     ioctl(pfd[target].fd, SIMPLE_PEBS_START, 0);
+    ioctl(pfd[target].fd, INIT_INSTR);
     int stride =0;
     int _count = 0;
     int tmp = num_mon_set -1;
@@ -468,6 +471,11 @@ int main(int ac, char **av)
 					}
 			}	
 		}
+		ioctl(pfd[target].fd, GET_CURRENT_INSTR, &ins_num_cur);
+		ioctl(pfd[target].fd, STOP_INSTR);
+		/*
+		printf("#ins:%lld******************\n",ins_num_cur);
+		*/
 		FILE *result;
 		snprintf(cpath,499,"%s.txt",path);
 		result = fopen(cpath,"w");
@@ -475,6 +483,12 @@ int main(int ac, char **av)
 		 	fprintf(result,"set%d %d\n",x,mon_set_count[x]);
 		}
 		fclose(result);
+		
+		snprintf(cpath,499,"%s_ins.txt",path);
+		result = fopen(cpath,"w");
+	  	fprintf(result,"%lld\n",ins_num_cur);
+		fclose(result);
+
 	}
   
   else if(mode==5){/* Monitor a specific set of LLC set, given #instruction (million) to start and length to monitor*/
@@ -488,9 +502,9 @@ int main(int ac, char **av)
     if(ioctl(pfd[target].fd, INIT_INSTR) < 0){
       perror("INIT_INSTR");
     }
-
+/*
     while((ins_num_cur/1000000) < ins_start){
-      usleep(10000);
+      usleep(100000);
       if(ioctl(pfd[target].fd, GET_CURRENT_INSTR, &ins_num_cur) < 0){
         perror("GET_CURRENT_INSTR");
       }
@@ -498,6 +512,7 @@ int main(int ac, char **av)
       printf("ins_num_cur:%lld\n",ins_num_cur);
     
     }
+*/
     /*
     ioctl(pfd[target].fd, STOP_INSTR); 
     */
