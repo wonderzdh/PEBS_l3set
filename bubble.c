@@ -34,6 +34,17 @@ int single_set_count[8]={0};
 int total_slice_count[2048]={0};
 int mon_set_count[2048]={0};
 
+struct timeval startT, endT;
+
+void startTime() { gettimeofday(&startT, 0); }
+
+void stopTime(const char *name) {
+  gettimeofday(&endT, 0);
+  double time = (endT.tv_sec - startT.tv_sec) * 1e3 +
+                (endT.tv_usec - startT.tv_usec) * 1e-3;
+  printf("[TIMECALC] %s = %.3f ms\n", name, time);
+}
+
 uint64_t rte_xorall64(uint64_t ma) {
 	return __builtin_parityll(ma);
 }
@@ -434,19 +445,22 @@ int main(int ac, char **av)
     int x1 = (1 << (11 - _count)) - 1;
     int x2 = 17 - _count;
     int x3 = (1 << _count ) -1 ;
+
     while(!quit_flag){
-      usleep(1000000);
+      usleep(200000);
       if(poll(pfd, ncpus, -1)<0)
 				perror("poll");
             
 			if(pfd[target].revents & POLLIN){
+				
+				//startTime();
 				if(ioctl(pfd[target].fd, SIMPLE_PEBS_GET_OFFSET, &len) < 0){
 					perror("SIMPLE_PEBS_GET_OFFSET");
 					continue;
 				}
 				
         printf("len:%d\n",len/8);
-				
+
 					if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
 						perror("GET_PID");
 						continue;
@@ -463,6 +477,7 @@ int main(int ac, char **av)
 						  mon_set_count[ (paddr >> x2) & x3 ] ++;
             }
 					}
+					//stopTime("dump+translation");
 					close(pagemap_fd);
 					
 					if (ioctl(pfd[target].fd, SIMPLE_PEBS_RESET, 0) < 0) {
@@ -535,7 +550,7 @@ int main(int ac, char **av)
     int x2 = 17 - _count;
     int x3 = (1 << _count ) -1 ;
     while((ins_num_cur/1000000) < ins_stop){
-      usleep(100000);
+      usleep(200000);
       
       if(ioctl(pfd[target].fd, GET_CURRENT_INSTR, &ins_num_cur) < 0){
         perror("GET_CURRENT_INSTR");

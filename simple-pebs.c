@@ -106,7 +106,7 @@
 #define S_PEBS_BUFFER_SIZE	(64 * 1024) /* PEBS buffer size */
 #define OUT_BUFFER_SIZE		(64 * 64 * 1024) /* must be multiple of 4k */
 
-#define PERIOD 1
+#define PERIOD 100
 
 #define LLC_SET_NUM 2048
 /* initial para*/
@@ -775,7 +775,7 @@ void simple_pebs_pmi(void)
 	 * fifo
 	 */
 
-	if ((void *)outbu - (void *)outbu_start >= (OUT_BUFFER_SIZE*7)/8) {
+	if ((void *)outbu - (void *)outbu_start >= (OUT_BUFFER_SIZE)/2) {
 		wake_up(this_cpu_ptr(&simple_pebs_wait));
 
 
