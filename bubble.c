@@ -99,60 +99,42 @@ int main(int ac, char **av)
 	struct pollfd pfd[ncpus];
 	int opt;
 	int i;
-  int target = 1;
+  	int target = 1;
 
 	/*
   for (i = 0; i < ncpus; i++)
 		open_cpu(&map[i], i, &pfd[i], size);
 	*/
-   pid_t pid;
+   	pid_t pid;
 	int pagemap_fd;
 	int x=0;
 	int phase_count=0;
 	
-  int len = 0;
+  	int len = 0;
+	int timecost_ms=0;
 	char path[500];
 	char cpath[500];
 
 	int mode=0;
-	while ((opt = getopt(ac, av, "t:n:s:x:y:a:b:c:d:e:f:")) != -1) {
+	while ((opt = getopt(ac, av, "t:n:s:x:y:c:m:p:")) != -1) {
 		switch(opt){
-      case 't':
-	target = atoi(optarg);
-      case 'n':
-        num_mon_set = atoi(optarg);
-      case 's':
-        mon_set0 = atoi(optarg);
-      case 'x':
-        ins_start = atoi(optarg);
-      case 'y':
-        ins_len = atoi(optarg);
-			case 'a':
-				mode=0;
+			case 't':
+				target = atoi(optarg);
+			case 'n':
+				num_mon_set = atoi(optarg);
+			case 's':
+				mon_set0 = atoi(optarg);
+			case 'x':
+				ins_start = atoi(optarg);
+			case 'y':
+				ins_len = atoi(optarg);
+			case 'c'://time cost (ms)
+				timecost_ms = atoi(optarg);
+			case 'm': //mode: 0,1,2,3,4,5
+				mode=atoi(optarg);
+			case 'p':
 				snprintf(path,300,"%s",optarg);
 				break;
-			case 'b':
-				mode=1;
-				snprintf(path,300,"%s",optarg);
-				break;
-			case 'c':
-				mode=2;
-				snprintf(path,300,"%s",optarg);
-				break;
-			case 'd':
-				mode=3;
-				snprintf(path,300,"%s",optarg);
-				break;
-			case 'e':
-				mode=4;
-				snprintf(path,300,"%s",optarg);
-				break;
-			case 'f':
-				mode=5;
-				snprintf(path,300,"%s",optarg);
-				break;
-
-
 			default:
 				usage();
 				exit(1);
@@ -418,72 +400,71 @@ int main(int ac, char **av)
       else usleep(200000);
 		}
 	}
-  else if(mode==4){/* Monitor a specific set of LLC set. */
+  	else if(mode==4){/* Monitor a specific set of LLC set. */
 		long long int ins_num_pre=0,ins_num_cur=0,ins_diff=0;
-    bool first_time=true;
-    struct mon_set_para val;
-    val.num = num_mon_set;
-    val.index0 = mon_set0;
-/*
-    if(ioctl(pfd[target].fd, SET_MON_NUM, &val)<0){
-      printf("input set pararmeter error!\n");
-      return 0;
-    }
-*/
-    ioctl(pfd[target].fd, SIMPLE_PEBS_START, 0);
-    ioctl(pfd[target].fd, INIT_INSTR);
-    int stride =0;
-    int _count = 0;
-    int tmp = num_mon_set -1;
-    while( tmp != 0){ 
-      tmp >>= 1; 
-      _count += 1; 
-    }
+		bool first_time=true;
+		struct mon_set_para val;
+		val.num = num_mon_set;
+		val.index0 = mon_set0;
+	/*
+		if(ioctl(pfd[target].fd, SET_MON_NUM, &val)<0){
+		printf("input set pararmeter error!\n");
+		return 0;
+		}
+	*/
+		ioctl(pfd[target].fd, SIMPLE_PEBS_START, 0);
+		ioctl(pfd[target].fd, INIT_INSTR);
+		int stride =0;
+		int _count = 0;
+		int tmp = num_mon_set -1;
+		while( tmp != 0){ 
+		tmp >>= 1; 
+		_count += 1; 
+		}
 
-    stride = 2048 / (1 << _count);
-    
-    int x1 = (1 << (11 - _count)) - 1;
-    int x2 = 17 - _count;
-    int x3 = (1 << _count ) -1 ;
+		stride = 2048 / (1 << _count);
+		
+		int x1 = (1 << (11 - _count)) - 1;
+		int x2 = 17 - _count;
+		int x3 = (1 << _count ) -1 ;
 
-    while(!quit_flag){
-      usleep(200000);
-      if(poll(pfd, ncpus, -1)<0)
+		while(!quit_flag){
+			usleep(200000);
+			if(poll(pfd, ncpus, -1)<0)
 				perror("poll");
-            
+					
 			if(pfd[target].revents & POLLIN){
-				
+					
 				//startTime();
 				if(ioctl(pfd[target].fd, SIMPLE_PEBS_GET_OFFSET, &len) < 0){
 					perror("SIMPLE_PEBS_GET_OFFSET");
 					continue;
 				}
-				
-        printf("len:%d\n",len/8);
+						
+				printf("len:%d\n",len/8);
 
-					if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
-						perror("GET_PID");
-						continue;
-					}
-					pagemap_fd = open_pagemap(pid);
-					unsigned long long paddr;
-					unsigned long long *vaddrset=(u64*) map[target];
-					int j;
+				if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
+					perror("GET_PID");
+					continue;
+				}
+				pagemap_fd = open_pagemap(pid);
+				unsigned long long paddr;
+				unsigned long long *vaddrset=(u64*) map[target];
+				int j;
 
-					for(j=0; j<len/8; j++){
-						virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
-              if ( ( (paddr >> 6) & x1) == mon_set0){
-              
-						  mon_set_count[ (paddr >> x2) & x3 ] ++;
-            }
+				for(j=0; j<len/8; j++){
+					virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
+					if ( ( (paddr >> 6) & x1) == mon_set0){
+						mon_set_count[ (paddr >> x2) & x3 ] ++;
 					}
-					//stopTime("dump+translation");
-					close(pagemap_fd);
-					
-					if (ioctl(pfd[target].fd, SIMPLE_PEBS_RESET, 0) < 0) {
-						perror("SIMPLE_PEBS_RESET");
-						continue;
-					}
+				}
+				//stopTime("dump+translation");
+				close(pagemap_fd);
+							
+				if (ioctl(pfd[target].fd, SIMPLE_PEBS_RESET, 0) < 0) {
+					perror("SIMPLE_PEBS_RESET");
+					continue;
+				}
 			}	
 		}
 		ioctl(pfd[target].fd, GET_CURRENT_INSTR, &ins_num_cur);
@@ -494,14 +475,14 @@ int main(int ac, char **av)
 		FILE *result;
 		snprintf(cpath,499,"%s.txt",path);
 		result = fopen(cpath,"w");
-	  for(x=0;x<num_mon_set;x++){
-		 	fprintf(result,"set%d %d\n",x,mon_set_count[x]);
+		for(x=0;x<num_mon_set;x++){
+				fprintf(result,"set%d %d\n",x,mon_set_count[x]);
 		}
 		fclose(result);
 		
 		snprintf(cpath,499,"%s_ins.txt",path);
 		result = fopen(cpath,"w");
-	  	fprintf(result,"%lld\n",ins_num_cur);
+		fprintf(result,"%lld\n",ins_num_cur);
 		fclose(result);
 
 	}
@@ -603,6 +584,90 @@ int main(int ac, char **av)
       perror("STOP_INSTR");
     }
 	}
+
+	else if(mode==6){/* Monitor a specific set of LLC set. */
+		long long int ins_num_pre=0,ins_num_cur=0,ins_diff=0;
+		bool first_time=true;
+		struct mon_set_para val;
+		val.num = num_mon_set;
+		val.index0 = mon_set0;
+	/*
+		if(ioctl(pfd[target].fd, SET_MON_NUM, &val)<0){
+		printf("input set pararmeter error!\n");
+		return 0;
+		}
+	*/
+		ioctl(pfd[target].fd, SIMPLE_PEBS_START, 0);
+		ioctl(pfd[target].fd, INIT_INSTR);
+		int stride =0;
+		int _count = 0;
+		int tmp = num_mon_set -1;
+		while( tmp != 0){ 
+		tmp >>= 1; 
+		_count += 1; 
+		}
+
+		stride = 2048 / (1 << _count);
+		
+		int x1 = (1 << (11 - _count)) - 1;
+		int x2 = 17 - _count;
+		int x3 = (1 << _count ) -1 ;
+
+		usleep(timecost_ms*1000);
+		if(poll(pfd, ncpus, -1)<0)
+			perror("poll");
+				
+		if(pfd[target].revents & POLLIN){
+				
+			//startTime();
+			if(ioctl(pfd[target].fd, SIMPLE_PEBS_GET_OFFSET, &len) < 0){
+				perror("SIMPLE_PEBS_GET_OFFSET");
+			}
+					
+			printf("len:%d\n",len/8);
+
+			if(ioctl(pfd[target].fd, GET_PID, &pid) < 0){
+				perror("GET_PID");
+			}
+			pagemap_fd = open_pagemap(pid);
+			unsigned long long paddr;
+			unsigned long long *vaddrset=(u64*) map[target];
+			int j;
+
+			for(j=0; j<len/8; j++){
+				virt_to_phys_user(&paddr, pagemap_fd, vaddrset[j]);
+				if ( ( (paddr >> 6) & x1) == mon_set0){
+					mon_set_count[ (paddr >> x2) & x3 ] ++;
+				}
+			}
+			//stopTime("dump+translation");
+			close(pagemap_fd);
+						
+			if (ioctl(pfd[target].fd, SIMPLE_PEBS_RESET, 0) < 0) {
+				perror("SIMPLE_PEBS_RESET");
+			}
+		}	
+		
+		ioctl(pfd[target].fd, GET_CURRENT_INSTR, &ins_num_cur);
+		ioctl(pfd[target].fd, STOP_INSTR);
+		/*
+		printf("#ins:%lld******************\n",ins_num_cur);
+		*/
+		FILE *result;
+		snprintf(cpath,499,"%s.txt",path);
+		result = fopen(cpath,"w");
+		for(x=0;x<num_mon_set;x++){
+				fprintf(result,"set%d %d\n",x,mon_set_count[x]);
+		}
+		fclose(result);
+		
+		snprintf(cpath,499,"%s_ins.txt",path);
+		result = fopen(cpath,"w");
+		fprintf(result,"%lld\n",ins_num_cur);
+		fclose(result);
+
+	}
+
 
 	return 0;
 }

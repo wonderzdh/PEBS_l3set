@@ -106,7 +106,7 @@
 #define S_PEBS_BUFFER_SIZE	(64 * 1024) /* PEBS buffer size */
 #define OUT_BUFFER_SIZE		(64 * 64 * 1024) /* must be multiple of 4k */
 
-#define PERIOD 100
+#define PERIOD 1
 
 #define LLC_SET_NUM 2048
 /* initial para*/
